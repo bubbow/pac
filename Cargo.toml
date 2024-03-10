@@ -1,0 +1,8 @@
+[package]
+name = "pac"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+native-dialog = "0.7.0"
+slint = "1.4.1"
