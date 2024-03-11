@@ -2589,6 +2589,7 @@ dependencies = [
 name = "pac"
 version = "0.1.0"
 dependencies = [
+ "home",
  "native-dialog",
  "slint",
 ]
