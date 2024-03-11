@@ -1,8 +1,8 @@
-use std::{process::Command, string};
+use std::process::Command;
 
 use native_dialog::FileDialog;
 
-
+use home::home_dir;
 
 //Slint code
 slint::slint!{
@@ -22,7 +22,7 @@ slint::slint!{
             Text{
                 text: "Format";
             }
-            file_format := ComboBox{
+            format_index := ComboBox{
                 model: ["MP4", "AVI", "MOV", "MP3", "M4A", "WAV", "OGG"];
                 current-value: "MP4"; 
                 
@@ -36,7 +36,7 @@ slint::slint!{
             }
             download_btn := Button{
                 text: "Download";
-                clicked => {app-do.download_btn_pressed(file-link.text, file-name.text, file-format.current-index)}
+                clicked => {app-do.download_btn_pressed(file-link.text, file-name.text, format-index.current-index)}
             }
             
         }
@@ -46,60 +46,67 @@ slint::slint!{
 //Main function
 fn main() {
     
-    let path = if cfg!(target_os = "windows"){"C:\\"}else{"~"};
-
+    let path = home_dir().map_or("~".to_string(), |p| p.display().to_string()); 
     let ui = app::new().unwrap();
-    
+
+    let shell = if cfg!(target_os = "windows"){"cmd"}else{"sh"};
+    let flag = if cfg!(target_os = "windows"){"/C"}else{"-c"};
+    let osslash = if cfg!(target_os = "windows"){"\\"}else{"/"};
+
     ui.global::<app_do>().on_download_btn_pressed(move |string, String, int| 
         {             
-            //this thing... *excuse my langauge* is f**king horrible but it works
             let file_link = string;
             let file_name = String;
-            let file_format = int;
-            let download_type_combo = if file_format == 0 {"bestvideo+bestaudio"}else{"bestaudio"};
-            let download_type_combo = if file_format == 1 {"bestvideo+bestaudio"}else{download_type_combo};
-            let download_type_combo = if file_format == 2 {"bestvideo+bestaudio"}else{download_type_combo};
-            
+            let format_index = int;
+            //Lets get the combo, assume the user wants audio in their video
+            let download_type_combo = match format_index{
+                0|1|2 => "bestvideo+bestaudio",
+                3|4|5|6 => "bestaudio",
+                _ => "bestvideo+bestaudio"
+            };
             let path = FileDialog::new()
-                .set_location(path)
+                .set_location(&path)
                 .show_open_single_dir()
                 .unwrap();
-
-            let download_type_format = if file_format == 0 {"mp4"}else{"mp4"};
-            let download_type_format = if file_format == 1 {"avi"}else{download_type_format};
-            let download_type_format = if file_format == 2 {"mov"}else{download_type_format};
-            let download_type_format = if file_format == 3 {"mp3"}else{download_type_format};
-            let download_type_format = if file_format == 4 {"m4a"}else{download_type_format};
-            let download_type_format = if file_format == 5 {"wav"}else{download_type_format};
-            let download_type_format = if file_format == 6 {"ogg"}else{download_type_format};
-            /* 
+ 
+             /* 
             file_format, 0=mp4 1=avi 2=mov 3=mp3 4=m4a 5=wav 6=ogg
              */
-            //theres a better way to do this, i'll fix later
-            if cfg!(target_os = "windows") && file_name == ""{
-                Command::new("cmd").arg("/C")
-                .arg(format!("yt-dlp -I 1 -f '{}' '{}' --recode {} -P '{}'", 
-                download_type_combo, file_link, download_type_format, path.expect("fail 1").display())).output().expect("fail 2");
-            }
-            else if cfg!(target_os = "windows"){ 
-                Command::new("cmd").arg("/C")
-                .arg(format!("yt-dlp -I 1 -f '{}' '{}' --recode {} -o '{}\\{}'",
-                download_type_combo, file_link, download_type_format, path.expect("fail 1").display(), file_name)).output().expect("fail 2");
-            }
-            else if file_name == ""
-            {
-                Command::new("sh").arg("-c")
+
+            //Lets get the file format
+            let download_type_format = match format_index{
+                0 => "mp4",
+                1 => "avi",
+                2 => "mov",
+                3 => "mp3",
+                4 => "m4a",
+                5 => "wav",
+                6 => "ogg",
+                _ => "mp4"
+            };
+            //Executing the yt-dlp command, codes a bit messy
+            if file_name == ""{
+             Command::new(shell).arg(flag)
                 .arg(format!("yt-dlp -I 1 -f  '{}' '{}' --recode {} -P '{}'",
-                 download_type_combo, file_link, download_type_format, path.expect("fail 1").display())).output().expect("fail 2");
-            }else
-            {
-                Command::new("sh").arg("-c")
-                .arg(format!("yt-dlp -I 1 -f  '{}' '{}' --recode {} -o '{}/{}'",
-                 download_type_combo, file_link, download_type_format, path.expect("fail 1").display(), file_name)).output().expect("fail 2");
+                    download_type_combo, 
+                    file_link, 
+                    download_type_format, 
+                    path.expect("Failed to get path").display()
+                    )).output().expect("Failed to execute yt-dlp, Do you have it installed?");
+            }else{
+                Command::new(shell).arg(flag)
+                    .arg(format!("yt-dlp -I 1 -f  '{}' '{}' --recode {} -o '{}{}{}'",
+                        download_type_combo, 
+                        file_link, 
+                        download_type_format, 
+                        path.expect("Failed to get path").display(), 
+                        osslash, 
+                        file_name)).output().expect("Failed to execute yt-dlp, Do you have it installed?");
             }
-            
         });
     
     ui.run().unwrap();
 }
+
+
 
