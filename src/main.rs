@@ -87,7 +87,7 @@ fn main() {
                 Command::new(shell)
                     .arg(flag)
                     .arg(format!(
-                        "yt-dlp {} -I 1 -f '{}' --recode {} -P '{}'",
+                        "yt-dlp -I 1 -f '{}' '{}' --recode {} -P '{}'",
                         quality,
                         file_link,
                         format_codec,
