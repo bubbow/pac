@@ -4,11 +4,13 @@ use native_dialog::FileDialog;
 
 use home::home_dir;
 
+use std::str;
+
 //Slint code
 slint::slint! {
-    import { Button, VerticalBox, ComboBox, LineEdit, HorizontalBox } from "std-widgets.slint";
+    import { Button, VerticalBox, ComboBox, LineEdit, HorizontalBox, CheckBox } from "std-widgets.slint";
     export global app_do {
-        callback download_btn_pressed(string, string, int, int);
+        callback download_btn_pressed(string, string, string, string, int, int, bool);
     }
     export component app {
 
@@ -18,6 +20,9 @@ slint::slint! {
             }
             file_link := LineEdit{
                 placeholder-text: "e.g: https://youtu.be/dQw4w9WgXcQ?si=kM1TGCNp9D5S8RiJ";
+            }
+            is_playlist := CheckBox{
+                text: "Playlist";
             }
             Text{
                 text: "Format";
@@ -33,6 +38,20 @@ slint::slint! {
                 }
             }
             Text{
+                text: "Cut";
+            }
+            HorizontalBox{
+                cut_arg1 := LineEdit{
+
+                }
+                Text{
+                    text: "-";
+                }
+                cut_arg2 := LineEdit{
+
+                }
+            }
+            Text{
                 text: "Output file name";
             }
             file_name := LineEdit {
@@ -41,7 +60,14 @@ slint::slint! {
             }
             download_btn := Button{
                 text: "Download";
-                clicked => {app-do.download_btn_pressed(file-link.text, file-name.text, format-index.current-index, quality_index.current-index)}
+                clicked => {app-do.download_btn_pressed(
+                    file-link.text,
+                    file-name.text,
+                    cut_arg1.text,
+                    cut_arg2.text,
+                    format-index.current-index,
+                    quality_index.current-index,
+                    is_playlist.checked)}
             }
 
         }
@@ -50,7 +76,6 @@ slint::slint! {
 
 //Main function
 fn main() {
-    
     let ui = app::new().unwrap();
 
     let path = home_dir().map_or("~".to_string(), |p| p.display().to_string());
@@ -70,38 +95,54 @@ fn main() {
     } else {
         "/"
     };
-    
 
     ui.global::<app_do>()
-        .on_download_btn_pressed(move |file_link, file_name, format_index, quality_index| {
+        .on_download_btn_pressed(move |file_link, file_name, cut_arg1, cut_arg2, format_index, quality_index, is_playlist| {
 
             let quality = parse_format_index_quality(quality_index, format_index);
             let format_codec = parse_format_index_codec(format_index);
+            let cut_range = parse_cut_args(cut_arg1.to_string(), cut_arg2.to_string());
 
             let path = FileDialog::new()
                 .set_location(&path)
                 .show_open_single_dir()
                 .unwrap();
             //Executing the yt-dlp command, codes a bit messy
-            if file_name == "" {
+            if is_playlist == true{
+                println!("Playlist mode");
                 Command::new(shell)
                     .arg(flag)
                     .arg(format!(
-                        "yt-dlp {} -I 1 -f '{}' --recode {} -P '{}'",
+                        "yt-dlp -f '{}' '{}' --recode {} -P '{}'",
                         quality,
                         file_link,
+                        format_codec,
+                        path.clone().expect("Failed to get path").display()
+                    ))
+                    .output()
+                    .expect("Failed to execute yt-dlp, Do you have it installed?");
+            }
+            else if file_name == "" && is_playlist == false {
+                Command::new(shell)
+                    .arg(flag)
+                    .arg(format!(
+                        "yt-dlp -I 1 -f '{}' '{}' {} --recode {} -P '{}'",
+                        quality,
+                        file_link,
+                        cut_range,
                         format_codec,
                         path.expect("Failed to get path").display()
                     ))
                     .output()
                     .expect("Failed to execute yt-dlp, Do you have it installed?");
-            } else {
+            } else if is_playlist == false {
                 Command::new(shell)
                     .arg(flag)
                     .arg(format!(
-                        "yt-dlp -I 1 -f '{}' '{}' --recode {} -o '{}{}{}'",
+                        "yt-dlp -I 1 -f '{}' '{}' {} --recode {} -o '{}{}{}'",
                         quality,
                         file_link,
+                        cut_range,
                         format_codec,
                         path.expect("Failed to get path").display(),
                         os_slash,
@@ -110,12 +151,12 @@ fn main() {
                     .output()
                     .expect("Failed to execute yt-dlp, Do you have it installed?");
             }
-            
             println!("The command below isnt really the one being executed, it's just here to tell me what is happening");
             println!("{}", format!(
-                "yt-dlp -I 1 -f '{}' '{}' --recode {} -o '{}{}'",
+                "yt-dlp -I 1 -f '{}' '{}' {} --recode {} -o '{}{}'",
                 quality,
                 file_link,
+                cut_range,
                 format_codec,
                 os_slash,
                 file_name
@@ -136,20 +177,21 @@ fn parse_format_index_quality(quality_index: i32, format_index: i32) -> String {
         5 => "[height<=360]",
         6 => "[height<=240]",
         7 => "[height<=144]",
-        _ => "[height<=1080]"
+        _ => "[height<=1080]",
     };
     //format_index, 0=mp4 1=avi 2=mov 3=mp3 4=m4a 5=wav 6=ogg
-    let quality = match format_index{
-        
+    let quality = match format_index {
         0 | 1 | 2 => format!("bestvideo{}+bestaudio", quality_command),
-        _ => "bestaudio".to_string()
+        _ => "bestaudio".to_string(),
     };
 
-    println!("{}", format!("Quality: Quality indexed as {}, Format indexed as {}, parsing to {}.", 
-    quality_index,
-    format_index,
-    quality
-    ));
+    println!(
+        "{}",
+        format!(
+            "Quality: Quality indexed as {}, Format indexed as {}, parsing to {}.",
+            quality_index, format_index, quality
+        )
+    );
     return quality.to_string();
 }
 
@@ -165,12 +207,39 @@ fn parse_format_index_codec(format_index: i32) -> String {
         6 => "ogg",
         _ => "mp4",
     };
-    println!("{}", format!("Codec: Format indexed as {}, parsing to {}.",
-    format_index,
-    format_codec
-    ));
+    println!(
+        "{}",
+        format!(
+            "Codec: Format indexed as {}, parsing to {}.",
+            format_index, format_codec
+        )
+    );
     return format_codec.to_string();
 }
 
+fn parse_cut_args(cut_arg1: String, cut_arg2: String) -> String {
+    let cut_arg1_bool = cut_arg1.trim().is_empty();
+    let cut_arg2_bool = cut_arg2.trim().is_empty();
 
+    let cut_arg1_parsed = match cut_arg1_bool {
+        true => "0:00",
+        false => &cut_arg1,
+    };
+    let cut_arg2_parsed = match cut_arg2_bool {
+        true => "inf",
+        false => &cut_arg2,
+    };
 
+    let cut_range = format!(
+        "--download-sections '*{}-{}'",
+        cut_arg1_parsed, cut_arg2_parsed
+    );
+    println!(
+        "{}",
+        format!(
+            "Cut: cut1={} cut2={}, parsing to: {}",
+            cut_arg1, cut_arg2, cut_range
+        )
+    );
+    return cut_range;
+}
