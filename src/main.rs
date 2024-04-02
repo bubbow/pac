@@ -142,7 +142,7 @@ fn main() {
                 Command::new(shell)
                     .arg(flag)
                     .arg(format!(
-                        "yt-dlp -I 1 -f '{}' '{}' {} --force-keyframes --recode {} -o '{}{}{}'",
+                        "yt-dlp -I 1 -f '{}' '{}' {} --recode {} -o '{}{}{}'",
                         quality,
                         file_link,
                         cut_range,
@@ -156,7 +156,7 @@ fn main() {
             }
             println!("The command below isnt really the one being executed, it's just here to tell me what is happening");
             println!("{}", format!(
-                "yt-dlp -I 1 -f '{}' '{}' {} --force-keyframes --recode {} -o '{}{}'",
+                "yt-dlp -I 1 -f '{}' '{}' {} --recode {} -o '{}{}'",
                 quality,
                 file_link,
                 cut_range,
@@ -251,7 +251,7 @@ fn parse_cut_args(cut_arg1: String, cut_arg2: String) -> String {
         "".to_string()
     } else {
             format!(
-                "--download-sections '*{}-{}'",
+                "--download-sections '*{}-{}' --force-keyframes",
                 cut_arg1_parsed, cut_arg2_parsed
             )
     };
