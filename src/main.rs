@@ -14,7 +14,7 @@ use std::thread::JoinHandle;
 slint::slint! {
     import { Button, VerticalBox, ComboBox, LineEdit, HorizontalBox, CheckBox } from "std-widgets.slint";
     export global app_do {
-        callback download_btn_pressed(string, string, string, string, int, int, bool);
+        callback download_btn_pressed(string, string, string, string, int, int, bool, bool);
     }
     export component app {
         VerticalBox{
@@ -54,6 +54,11 @@ slint::slint! {
 
                 }
             }
+            
+            force_keyframes := CheckBox{
+                text: "Force Keyframes";
+            }
+
             Text{
                 text: "Output file name";
             }
@@ -70,7 +75,8 @@ slint::slint! {
                     cut_arg2.text,
                     format-index.current-index,
                     quality_index.current-index,
-                    is_playlist.checked)}
+                    is_playlist.checked,
+                    force_keyframes.checked)}
             }
 
         }
@@ -100,10 +106,10 @@ fn main() {
     };
 
     ui.global::<app_do>()
-        .on_download_btn_pressed(move |file_link, file_name, cut_arg1, cut_arg2, format_index, quality_index, is_playlist| {
+        .on_download_btn_pressed(move |file_link, file_name, cut_arg1, cut_arg2, format_index, quality_index, is_playlist, force_keyframes| {
             let quality = parse_format_index_quality(quality_index, format_index);
             let format_codec = parse_format_index_codec(format_index);
-            let cut_range = parse_cut_args(cut_arg1.to_string(), cut_arg2.to_string());
+            let cut_range = parse_cut_args(cut_arg1.to_string(), cut_arg2.to_string(), force_keyframes);
 
             let path_dialog = FileDialog::new()
                 .set_location(&path)
@@ -235,10 +241,14 @@ fn parse_format_index_codec(format_index: i32) -> String {
     return format_codec.to_string();
 }
 
-fn parse_cut_args(cut_arg1: String, cut_arg2: String) -> String {
+fn parse_cut_args(cut_arg1: String, cut_arg2: String, force_keyframes: bool) -> String {
     let cut_arg1_bool = cut_arg1.trim().is_empty();
     let cut_arg2_bool = cut_arg2.trim().is_empty();
-
+    let force_keyframes = if force_keyframes == true{
+        "--force-keyframes".to_string()
+        } else {
+            "".to_string()
+        };
     let cut_arg1_parsed = match cut_arg1_bool {
         true => "0:00",
         false => &cut_arg1,
@@ -251,8 +261,8 @@ fn parse_cut_args(cut_arg1: String, cut_arg2: String) -> String {
         "".to_string()
     } else {
             format!(
-                "--download-sections '*{}-{}' --force-keyframes",
-                cut_arg1_parsed, cut_arg2_parsed
+                "--download-sections '*{}-{}' {}",
+                cut_arg1_parsed, cut_arg2_parsed, force_keyframes
             )
     };
     println!(
