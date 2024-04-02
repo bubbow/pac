@@ -1,10 +1,14 @@
 use std::process::Command;
 
-use native_dialog::FileDialog;
+use native_dialog::{FileDialog, MessageDialog, MessageType};
 
 use home::home_dir;
 
 use std::str;
+
+use std::thread;
+
+use std::thread::JoinHandle;
 
 //Slint code
 slint::slint! {
@@ -13,7 +17,6 @@ slint::slint! {
         callback download_btn_pressed(string, string, string, string, int, int, bool);
     }
     export component app {
-
         VerticalBox{
             Text {
                 text: "Link";
@@ -98,17 +101,17 @@ fn main() {
 
     ui.global::<app_do>()
         .on_download_btn_pressed(move |file_link, file_name, cut_arg1, cut_arg2, format_index, quality_index, is_playlist| {
-
             let quality = parse_format_index_quality(quality_index, format_index);
             let format_codec = parse_format_index_codec(format_index);
             let cut_range = parse_cut_args(cut_arg1.to_string(), cut_arg2.to_string());
 
-            let path = FileDialog::new()
+            let path_dialog = FileDialog::new()
                 .set_location(&path)
                 .show_open_single_dir()
                 .unwrap();
+            let path = path_dialog.clone();
             //Executing the yt-dlp command, codes a bit messy
-            if is_playlist == true{
+            let download_thread = thread::spawn(move ||{if is_playlist == true{
                 println!("Playlist mode");
                 Command::new(shell)
                     .arg(flag)
@@ -126,7 +129,7 @@ fn main() {
                 Command::new(shell)
                     .arg(flag)
                     .arg(format!(
-                        "yt-dlp -I 1 -f '{}' '{}' {} --recode {} -P '{}'",
+                        "yt-dlp -I 1 -f '{}' '{}' {}  --recode {} -P '{}'",
                         quality,
                         file_link,
                         cut_range,
@@ -139,7 +142,7 @@ fn main() {
                 Command::new(shell)
                     .arg(flag)
                     .arg(format!(
-                        "yt-dlp -I 1 -f '{}' '{}' {} --recode {} -o '{}{}{}'",
+                        "yt-dlp -I 1 -f '{}' '{}' {} --force-keyframes --recode {} -o '{}{}{}'",
                         quality,
                         file_link,
                         cut_range,
@@ -153,14 +156,29 @@ fn main() {
             }
             println!("The command below isnt really the one being executed, it's just here to tell me what is happening");
             println!("{}", format!(
-                "yt-dlp -I 1 -f '{}' '{}' {} --recode {} -o '{}{}'",
+                "yt-dlp -I 1 -f '{}' '{}' {} --force-keyframes --recode {} -o '{}{}'",
                 quality,
                 file_link,
                 cut_range,
                 format_codec,
                 os_slash,
                 file_name
-            ))
+            ))});
+            let is_finished = JoinHandle::is_finished(&download_thread);
+            thread::spawn(move || {
+                if is_finished == false{
+                    while is_finished == false{
+                        let is_finished_check = JoinHandle::is_finished(&download_thread);
+                        if is_finished_check == true{
+                            download_complete_dialouge();
+                            break;
+                        }
+                    }
+                        if is_finished == true{
+                            download_complete_dialouge();
+                        }             
+                }
+            });     
         });
 
     ui.run().unwrap();
@@ -229,11 +247,14 @@ fn parse_cut_args(cut_arg1: String, cut_arg2: String) -> String {
         true => "inf",
         false => &cut_arg2,
     };
-
-    let cut_range = format!(
-        "--download-sections '*{}-{}'",
-        cut_arg1_parsed, cut_arg2_parsed
-    );
+    let cut_range = if cut_arg1_parsed == "0:00" && cut_arg2_parsed == "inf" {
+        "".to_string()
+    } else {
+            format!(
+                "--download-sections '*{}-{}'",
+                cut_arg1_parsed, cut_arg2_parsed
+            )
+    };
     println!(
         "{}",
         format!(
@@ -241,5 +262,14 @@ fn parse_cut_args(cut_arg1: String, cut_arg2: String) -> String {
             cut_arg1, cut_arg2, cut_range
         )
     );
-    return cut_range;
+    return cut_range.to_string();
+}
+
+fn download_complete_dialouge() {
+    MessageDialog::new()
+        .set_type(MessageType::Info)
+        .set_title("Downloaded")
+        .set_text("YT-DLP process ended")
+        .show_alert()
+        .unwrap();
 }
